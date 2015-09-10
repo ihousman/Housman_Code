@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document id="test_kml.kml">
+<name>test_kml.kml</name>
+<Snippet></Snippet>
+<Folder id="FeatureLayer0">
+<name>test_kml.kml</name>
+<Snippet></Snippet>
+<Placemark>
+<name>1</name>
+<styleUrl>#IconStyle00</styleUrl>
+<Snippet></Snippet>
+<Point>
+<extrude>0</extrude>	<altitudeMode>relativeToGround</altitudeMode>
+<coordinates> 145.1994444,-4.564444444,0.000000</coordinates>
+</Point>
+</Placemark>
+</Folder>
+<Style id="IconStyle00">
+<IconStyle>
+<Icon><href>http://www.google.com/intl/en_us/mapfiles/ms/icons/red-dot.png</href></Icon>
+<scale>1.000000</scale>
+</IconStyle>
+<LabelStyle>
+<color>00000000</color>
+<scale>0.000000</scale>
+</LabelStyle>
+</Style>
+</Document>
+</kml>

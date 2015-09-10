@@ -491,6 +491,7 @@ def unique_count(in_list):
 #Function to convert a specified column from a specified dbf file into a list
 #e.g. dbf_to_list(some_dbf_file, integer_column_number)
 def dbf_to_list(dbf_file, field_name):
+
     if os.path.splitext(dbf_file)[1] == '.shp':
         dbf_file = os.path.splitext(dbf_file)[0] + '.dbf'
     #The next exception that is handled is handled within an if loop
@@ -516,6 +517,7 @@ def dbf_to_list(dbf_file, field_name):
 
     #Iterate through each row within the dbf
     for row in range(rows):
+        print row
         #Add each number in the specified column number to the list
         out_list.append(db[row][field_name])
     db.close()
@@ -607,7 +609,7 @@ def batch_utm_to_geog(zone, coord_list):
 #Converts between Numpy and GDAL data types
 #Will automatically figure out which direction it must go (numpy to gdal or gdal to numpy)
 def dt_converter(dt):
-    Dict = {'u1': 'Byte', 'uint8' : 'Byte', 'uint16': 'UInt16','u2': 'UInt16', 'u4': 'UInt32', 'i2' : 'Int16', 'int16':'Int16', 'Float32' : 'float32','float32' : 'Float32', 'Float64' : 'float64','float64' : 'Float64'}
+    Dict = {'u1': 'Byte', 'uint8' : 'Byte', 'uint16': 'UInt16','u2': 'UInt16', 'u4': 'UInt32', 'i2' : 'Int16','i4':'Int32', 'int16':'Int16', 'Float32' : 'float32','float32' : 'Float32', 'Float64' : 'float64','float64' : 'Float64'}
     try:
         Type = Dict[dt]
     except:
@@ -636,6 +638,9 @@ def projection_format_converter(projection, Format = 'Wkt'):
     wkt = spatialRef.ExportToWkt()
     #epsg = spatialRef.Export
     return {'proj4' : proj4, 'wkt': wkt, 'spatialRef' : spatialRef}
+def reverseDictionary(Dict):
+    return dict(map(lambda a:[a[1], a[0]], Dict.iteritems()))
+
 ##############################################################################################
 #Buffers coordinates a specified distance
 #Input must be projected, but can product geographic coordinates with UTM input
@@ -740,7 +745,7 @@ def shape_info(shapefile, runr = False, small = False):
         info['wkt'] = projections['wkt']
     return info
 ##############################################################################################
-def xy_list_to_kml(xy_list, kml, zone = '', utm_or_geog = 'utm'):
+def xy_list_to_kml(xy_list, kml, zone = '', utm_or_geog = 'utm', lonIndex = 0, latIndex = 1):
     ID = os.path.basename(kml)
     out_kml = '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document id="'+ID+'">\n<name>'+ID+'</name>\n'
     out_kml += '<Snippet></Snippet>\n<Folder id="FeatureLayer0">\n<name>'+ID+'</name>\n<Snippet></Snippet>\n'
@@ -748,8 +753,8 @@ def xy_list_to_kml(xy_list, kml, zone = '', utm_or_geog = 'utm'):
 
     i = 1
     for line in xy_list:
-        x = line[0]
-        y = line[1]
+        x = line[lonIndex]
+        y = line[latIndex]
 
         if utm_or_geog == 'utm':
             coords = utm_to_geog(zone, x, y)
@@ -757,7 +762,8 @@ def xy_list_to_kml(xy_list, kml, zone = '', utm_or_geog = 'utm'):
             coords = [x, y]
 
         out_kml += '<Placemark>\n<name>'+str(i)+'</name>\n<styleUrl>#IconStyle00</styleUrl>\n<Snippet></Snippet>\n<Point>\n<extrude>0</extrude>\t<altitudeMode>relativeToGround</altitudeMode>\n'
-        out_kml += '<coordinates> '+str(coords[1])+','+str(coords[0])+',0.000000</coordinates>\n</Point>\n</Placemark>\n'
+
+        out_kml += '<coordinates> '+str(coords[0])+','+str(coords[1])+',0.000000</coordinates>\n</Point>\n</Placemark>\n'
         i += 1
 
     out_kml += '</Folder>\n<Style id="IconStyle00">\n<IconStyle>\n<Icon><href>http://www.google.com/intl/en_us/mapfiles/ms/icons/red-dot.png</href></Icon>\n<scale>1.000000</scale>\n</IconStyle>\n<LabelStyle>\n<color>00000000</color>\n<scale>0.000000</scale>\n</LabelStyle>\n</Style>\n</Document>\n</kml>'
@@ -765,30 +771,43 @@ def xy_list_to_kml(xy_list, kml, zone = '', utm_or_geog = 'utm'):
     out_open = open(kml, 'w')
     out_open.writelines(out_kml)
     out_open.close()
+
 ##############################################################################################
 #Converts a CSV to kml
-def csv_to_kml(csv, kml, zone = '', utm_or_geog = 'utm',header = True):
+def csv_to_kml(csv, kml, zone = '', utm_or_geog = 'utm',header = True,id = False,iconURL = 'http://maps.google.com/mapfiles/kml/shapes/cross-hairs_highlight.png'):
     open_csv = open(csv, 'r')
     lines = open_csv.readlines()
     open_csv.close()
+    print(lines)
     ID = os.path.basename(csv)
 
     out_kml = '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document id="'+ID+'">\n<name>'+ID+'</name>\n'
     out_kml += '<Snippet></Snippet>\n<Folder id="FeatureLayer0">\n<name>'+ID+'</name>\n<Snippet></Snippet>\n'
-
+    out_kml += '<Style id="pushpin">\n<IconStyle id="mystyle">\n<Icon>\n<href>'+iconURL+'</href>\n'
+    out_kml +='<scale>1.0</scale>\n</Icon>\n</IconStyle>\n</Style>\n'
     if header == True:
         lines = lines[1:]
+    if id:
+        xIndex = 1
+        yIndex = 2
+    else:
+        xIndex = 0
+        yIndex = 1
     i = 1
     for line in lines:
-        x = float(line.split(',')[0])
-        y = float(line.split(',')[1][:-1])
-
+        x = float(line.split(',')[xIndex])
+        y = float(line.split(',')[yIndex][:-1])
+        print(x,y)
+        if id:
+            idNo =line.split(',')[0]
+        else:
+            idNo  = i
         if utm_or_geog == 'utm':
             coords = utm_to_geog(zone, x, y)
         else:
             coords = [x, y]
 
-        out_kml += '<Placemark>\n<name>'+str(i)+'</name>\n<styleUrl>#IconStyle00</styleUrl>\n<Snippet></Snippet>\n<Point>\n<extrude>0</extrude>\t<altitudeMode>relativeToGround</altitudeMode>\n'
+        out_kml += '<Placemark>\n<name>'+str(idNo)+'</name>\n<styleUrl>#pushpin</styleUrl>\n<Snippet></Snippet>\n<Point>\n<extrude>0</extrude>\t<altitudeMode>relativeToGround</altitudeMode>\n'
         out_kml += '<coordinates> '+str(coords[1])+','+str(coords[0])+',0.000000</coordinates>\n</Point>\n</Placemark>\n'
         i += 1
 
@@ -800,11 +819,10 @@ def csv_to_kml(csv, kml, zone = '', utm_or_geog = 'utm',header = True):
 ##############################################################################################
 def shape_to_kml(in_shp, out_kml, name_field = 'NAME',gdal_dir = program_files_dir + '/FWTools2.4.7/bin/'):
     #print 'Converting', base(in_shp),'to',base(out_kml)
-    gdal_call = gdal_dir + 'ogr2ogr -f KML ' + out_kml + ' ' + in_shp + ' -dsco NameField=' + name_field
+    gdal_call = gdal_dir + 'ogr2ogr -f KML "' + out_kml + '" "' + in_shp + '" -dsco NameField=' + name_field
     print gdal_call
     call = subprocess.Popen(gdal_call)
     call.wait()
-
 
 ##############################################################################################
 def range_to_dt(Min, Max):
@@ -812,6 +830,7 @@ def range_to_dt(Min, Max):
     dt_ranges_float = [[[-3.4E38, 3.4E38], 'Float32'], [[-1.7E308, 1.7E308], 'Float64']]
 
     print type(Min)
+
 
     type_dict = {float: 'float', int: 'int'}
 
@@ -924,33 +943,7 @@ def update_raster(image_to_update, array,xo,yo, no_data = ''):
     brick_info(image_to_update, get_stats = True)
     rast = None
 ##############################################################################################
-def set_no_data(image, no_data_value = -9999, update_stats = True):
-    rast = gdal.Open(image, gdal.GA_Update)
-    ri = raster_info(image)
-    nd = ri['no_data']
-    print 'Processing no_data for:',base(image)
-    if nd != no_data_value:
 
-        print 'Changing no data from:',nd,'to',no_data_value
-        for band in range(1, ri['bands']+1):
-
-            b = rast.GetRasterBand(band)
-            b.SetNoDataValue(no_data_value)
-            if update_stats:
-                print 'Updating stats for band:',band
-                Min,Max,Mean,Std = b.ComputeStatistics(0)
-                b.SetStatistics(Min,Max,Mean,Std)
-            else:
-                Min,Max,Mean,Std =  b.GetStatistics(0,0)
-            print 'Min:',Min
-            print 'Max:',Max
-            print 'Mean:',Mean
-            print 'Std:', Std
-    else:
-        print 'No data already = ', no_data_value
-    print
-
-##############################################################################################
 def update_color_table_or_names(image,color_table = '',names = ''):
     rast = gdal.Open(image, gdal.GA_Update)
     b = rast.GetRasterBand(1)
@@ -1062,6 +1055,7 @@ def raster_info(image = '', band_no = 1, get_stats = False, guiable = True):
             print piece, info[piece]
     rast  = None
     return info
+#print raster_info(r'D:\Valley_Bottom_Logistic_Model\lidar_output_predictors2\6270_37380_Euclidean_Distance_from_Channel.img')['transform']
 ##############################################################################################
 #Applies raster_info across all bands and returns a list of raster_info dictionaries
 def brick_info(image = '', get_stats = False):
@@ -1231,6 +1225,81 @@ def glob_end(Dir, end):
 ##
 ##
 ##############################################################################################
+def set_no_data(image, no_data_value = -9999, update_stats = True):
+    rast = gdal.Open(image, gdal.GA_Update)
+    ri = raster_info(image)
+    nd = ri['no_data']
+    print 'Processing no_data for:',base(image)
+    if nd != no_data_value:
+
+        print 'Changing no data from:',nd,'to',no_data_value
+        for band in range(1, ri['bands']+1):
+
+            b = rast.GetRasterBand(band)
+            b.SetNoDataValue(no_data_value)
+            if update_stats:
+                print 'Updating stats for band:',band
+                Min,Max,Mean,Std = b.ComputeStatistics(0)
+                b.SetStatistics(Min,Max,Mean,Std)
+            else:
+                Min,Max,Mean,Std =  b.GetStatistics(0,0)
+            print 'Min:',Min
+            print 'Max:',Max
+            print 'Mean:',Mean
+            print 'Std:', Std
+    else:
+        print 'No data already = ', no_data_value
+    print
+##Dir = 'D:/claslite/PNG_Test/'
+##tifs = glob(Dir, '.tif')
+##for tif in tifs:
+##    set_no_data(tif, -32768,True)
+def set_stats(image,Min=None,Max=None,Mean=None,Std=None):
+    rast = gdal.Open(image, gdal.GA_Update)
+    ri = raster_info(image)
+    nd = ri['no_data']
+
+    for band in range(1, ri['bands']+1):
+
+        b = rast.GetRasterBand(band)
+        b.SetStatistics(Min,Max,Mean,Std)
+    #rast = None
+
+def set_projection(image,crs):
+
+
+    rast = gdal.Open(image, gdal.GA_Update)
+    rast.SetProjection(crs)
+    rast = None
+##
+##proj = 'PROJCS["NAD83 / Conus Albers",\
+##  GEOGCS["NAD83",\
+##    DATUM["North American Datum 1983",\
+##      SPHEROID["GRS 1980", 6378137.0, 298.257222101, AUTHORITY["EPSG","7019"]],\
+##      TOWGS84[1.0, 1.0, -1.0, 0.0, 0.0, 0.0, 0.0],\
+##      AUTHORITY["EPSG","6269"]],\
+##    PRIMEM["Greenwich", 0.0, AUTHORITY["EPSG","8901"]],\
+##    UNIT["degree", 0.017453292519943295],\
+##    AXIS["Geodetic longitude", EAST],\
+##    AXIS["Geodetic latitude", NORTH],\
+##    AUTHORITY["EPSG","4269"]],\
+##  PROJECTION["Albers Equal Area", AUTHORITY["EPSG","9822"]],\
+##  PARAMETER["central_meridian", -96.0],\
+##  PARAMETER["latitude_of_origin", 23.0],\
+##  PARAMETER["standard_parallel_1", 29.5],\
+##  PARAMETER["false_easting", 0.0],\
+##  PARAMETER["false_northing", 0.0],\
+##  PARAMETER["standard_parallel_2", 45.5],\
+##  UNIT["m", 1.0],\
+##  AXIS["Easting", EAST],\
+##  AXIS["Northing", NORTH],\
+##  AUTHORITY["EPSG","5070"]]'
+##Dir = 'D:/Downloads/rtfd_baselines/'
+##tifs = glob(Dir,'.tif')
+##for tif in tifs:
+##    set_projection(tif,proj)
+##    set_no_data(tif,-32768)
+##############################################################################################
 def quick_look(tar_list, out_dir, bands = [], leave_extensions = ['_MTLold.txt', '_MTL.txt'], df = 'ENVI', out_extension = ''):
     if os.path.exists(out_dir) == False:
         os.makedirs(out_dir)
@@ -1367,6 +1436,7 @@ def raster(Raster, dt = '', band_no = 1, xoffset = 0, yoffset = 0, width = '', h
         width = info['width'] - xoffset
     if height == '':
         height = info['height']- yoffset
+    band_no = int(band_no)
     print
     print 'Reading raster:', Raster.split('/')[-1]
     print 'Band number:', band_no
@@ -1390,7 +1460,7 @@ def brick(Raster, dt = '', xoffset = 0, yoffset = 0, width = '', height = '', ba
         info = raster_info(Raster[0])
     else:
         info = raster_info(Raster)
-    if band_list != []:
+    if band_list != [] and band_list != '' and band_list != None:
         bands = band_list
     else:
         bands = range(1, info['bands'] + 1)
@@ -1854,7 +1924,7 @@ def matrix_linregress(y,x = '', vertical_view = False, return_residuals = True, 
 ###y = numpy.random.randint((100).reshape((25,2,2))
 ##
 #print  matrix_linregress(y, x_term = 'x', compute_r2 = True,return_residuals = False)#,in_no_data = y[0][0][0], out_no_data = 501)
-def new_big_image_matrix_linregress(in_image,out_image, years = '', in_no_data = 255,out_no_data = -600, mem_size_limit = 20000, layer_names = ['slope', 'b', 'r2']):
+def new_big_image_matrix_linregress(in_image,out_image, years = '', in_no_data = 255,out_no_data = -600, mem_size_limit = 20000, layer_names = ['slope', 'b', 'r2'], band_list = []):
     ri = raster_info(in_image)
     log_file = os.path.splitext(out_image)[0] + '_matrix_linregress_log.txt'
 
@@ -1868,15 +1938,16 @@ def new_big_image_matrix_linregress(in_image,out_image, years = '', in_no_data =
         tb1 = time.time()
         ti= tiled_image(out_image,in_image,bands = 3,dt = 'Float32', size_limit_kb = mem_size_limit, outline_tiles = True, out_no_data = out_no_data)
         i = 1
+
         lo = open(log_file, 'a+')
-        lo.write('Chunk size (mb): ' + str(mem_size_limit) + '\nNumber of chunks to process: ' + str(len(ti.chunk_list))+ '\n\n')
+        lo.write('Chunk size (mb): ' + str(mem_size_limit) + '\nNumber of chunks to process: ' + str(len(ti.chunk_list))+ '\nBand list: '+str(band_list)+'\nYear list: '+str(years)+'\n')
         for xo,yo,w,h in ti.chunk_list:
             tt1 = time.time()
             lo = open(log_file, 'a+')
             print 'Processing tile:',i,'/', len(ti.chunk_list)
             lo.write('Start\tProcess chunk\t' + str(i) + '\t' + now()+'\n')
             try:
-                b = brick(in_image,'Float32', xo,yo,w,h)#, na_value = ri['no_data'])
+                b = brick(in_image,'Float32', xo,yo,w,h, band_list = band_list)#, na_value = ri['no_data'])
                 lo.write('Success\tRead chunk\t' + str(i)+'\t'+now()+'\n')
             except:
                 lo.write('Fail\tRead chunk\t' + str(i)+'\t'+now()+'\n')
@@ -1977,6 +2048,91 @@ def best_function(x,y, function_list = ['first_order_poly',
 
 
 ######################################################################################
+##############################################################
+#Reduces array to it divides without a remainder- for aggegating
+def int_aggregate_dimensions(in_array,factor):
+    factor = int(factor)
+    s = in_array.shape
+    while s[0]%factor != 0:
+        in_array = in_array[:-1,:]
+        s = in_array.shape
+        print s
+    while s[1]%factor != 0:
+        in_array = in_array[:,:-1]
+        s = in_array.shape
+        print s
+    return in_array
+###############################################################
+#Function to aggregate a numpy array by 2x
+#Possible funs are: mean,min,max,std
+#Adapted from: http://stackoverflow.com/questions/14916545/numpy-rebinning-a-2d-array
+def aggregate_array(in_array, factor = 2, fun = 'mean'):
+    s = in_array.shape
+
+    factor = int(factor)
+    in_array = int_aggregate_dimensions(in_array,factor)
+    new_s = (s[0]/factor,factor,s[-1]/factor,factor)
+
+    a_view = in_array.reshape(new_s)
+    in_array = None
+
+    exec('a_out = a_view.'+fun+'(axis = 3).'+fun+'(axis = 1)')
+
+    return a_out
+
+##############################################################
+#Function to aggregate raster
+def aggregate_raster(in_raster,out_raster, factor = 2, ignore_no_data = True):
+    factor = int(factor)
+
+    #Get info about raster
+    ri = raster_info(in_raster)
+
+    #Find the output resolution
+    res = ri['res']
+    out_res = float(res) *factor
+
+    #Find no data
+    no_data = ri['no_data']
+
+    #Set up the transform
+    t = ri['transform']
+    out_transform = [t[0], out_res,t[2],t[3],t[4],-1*out_res]
+
+
+    ti = None
+
+    #Iterate through the bands
+    for b in range(1,ri['bands']+1):
+
+        #Read in raster of band n
+        r = raster(in_raster,'',b)
+
+        if no_data != None and ignore_no_data:
+            print 'Masking no data'
+            r = numpy.ma.masked_equal(r,no_data)
+
+        print 'Aggregating band:', b
+
+        #Aggregate the raster
+        ot = aggregate_array(r,factor)
+        r = None
+
+        #Initialize the output raster if not already done
+        if ti == None:
+            width = ot.shape[1]
+            height = ot.shape[0]
+            ti = tiled_image(out_raster,'',width,height,ri['bands'],ri['dt'],out_transform,ri['projection'],'HFA',True,120000,True,out_no_data = ri['no_data'])
+
+        #Add degraded raster to output
+        ti.add_tile(ot,0,0, b)
+
+
+        ot = None
+
+    ti.rm()
+    brick_info(out_raster,True)
+##############################################################
 ########################################################################################
 #Provides a quick mosaic method for on-the-fly tiled array writing to a larger raster
 #Designed to avoid writing individual tiles, and then mosaicking them after all tiles are created
@@ -2045,7 +2201,10 @@ class tiled_image:
             #Sets up the chunk size
             self.template_image = template_image
             self.size_limit_kb = size_limit_kb
-            self.file_size =  os.path.getsize(template_image)/1024.0
+            if os.path.exists(os.path.splitext(template_image)[0] + '.ige') == True:
+                self.file_size =  os.path.getsize(os.path.splitext(template_image)[0] + '.ige')/1024.0
+            else:
+                self.file_size =  os.path.getsize(template_image)/1024.0
             self.pixel_count = self.height * self.width
             self.chunk_pointer_maker(size_limit_kb)
 ###########################################################################################
@@ -2143,9 +2302,15 @@ class tiled_image:
                 #print 'Could not write', array[band-1]
         else:
             if self.ct != '':
-                self.ds.GetRasterBand(specific_band).SetRasterColorTable(self.ct)
+                try:
+                    self.ds.GetRasterBand(specific_band).SetRasterColorTable(self.ct)
+                except:
+                    print 'Could not set color table'
             if self.names != '':
-                self.ds.GetRasterBand(specific_band).SetRasterCategoryNames(self.names)
+                try:
+                    self.ds.GetRasterBand(specific_band).SetRasterCategoryNames(self.names)
+                except:
+                    print 'Could not set names'
             if self.out_no_data != '':
                 self.ds.GetRasterBand(specific_band).SetNoDataValue(self.out_no_data)
             self.ds.GetRasterBand(specific_band).WriteArray(in_array[0], x_offset, y_offset)
@@ -2160,7 +2325,7 @@ class tiled_image:
 #######################################################################################
 #Will write a numpy array to a raster
 #Byte, UInt16, Int16, UInt32, Int32, Float32, Float6
-def write_raster(numpy_array,output_name, template = '', df = 'HFA', dt = 'Int16', width = '', height = '', bands = 1, projection = '', transform = '', ct = '', names = '', out_no_data = '',assume_ct_names = True):
+def write_raster(numpy_array,output_name, template = '', df = 'HFA', dt = 'Int16', width = '', height = '', bands = 1, projection = '', transform = '', ct = '', names = '', out_no_data = '',assume_ct_names = True, compress = False):
 
     df = format_dict[os.path.splitext(output_name)[1]]
     if numpy_or_gdal(dt) == 'numpy':
@@ -2185,8 +2350,10 @@ def write_raster(numpy_array,output_name, template = '', df = 'HFA', dt = 'Int16
         rast = gdal.Open(template)
         transform = rast.GetGeoTransform()
     driver = gdal.GetDriverByName(df)
-    ds = driver.Create(output_name, width, height, bands, eval(dt))
-
+    if not compress:
+        ds = driver.Create(output_name, width, height, bands, eval(dt))
+    else:
+        ds = driver.Create(output_name, width, height, bands, eval(dt),['COMPRESS=LZW'])
     ds.SetProjection(projection)
     ds.SetGeoTransform(transform)
     print 'Writing: ' + output_name.split('/')[-1]
@@ -2248,22 +2415,45 @@ def color_table_and_names(image, band = 1):
     ct = b1.GetRasterColorTable()
     names = b1.GetRasterCategoryNames()
     return ct, names, b1, rast
+
+color_dict = {'green' : (0, 200, 0, 255),
+                  'red' : (200, 0, 0, 255),
+                  'blue' : (0, 0, 200, 255),
+                   'light_blue':(0, 102, 255,255),
+                   'light_purple':(235, 153, 235),
+                  'orange' : (255, 128, 0, 255),
+                  'yellow' : (255, 255, 0, 255),
+                  'gray' : (224, 224, 224, 255)
+                  }
 ######################################################################################
 #Function for creating a gdal color ramp
 #Uses a numpy array to find the min and max and then creates a color table using those values
 #The array must be positive
+
 def min_max_color_ramp(array, cmin = 'red', cmax = 'green', gray_zero = True):
-    color_dict = {'green' : (0, 200, 0, 255),
-                  'red' : (200, 0, 0, 255),
-                  'blue' : (0, 0, 200, 255),
-                  'orange' : (255, 128, 0, 255),
-                  'gray' : (224, 224, 224, 255)
-                  }
+
     print 'Creating min max color table'
     Min = int(numpy.amin(array))
     if Min <= 0:
         Min = 1
     Max = int(numpy.amax(array))
+    ct = gdal.ColorTable()
+    ct.CreateColorRamp(Min, color_dict[cmin], Max, color_dict[cmax])
+    if gray_zero:
+        ct.SetColorEntry(0, color_dict['gray'])
+    return ct
+##############################################################
+######################################################################################
+#Function for creating a gdal color ramp
+#Uses a numpy array to find the min and max and then creates a color table using those values
+#The array must be positive
+def min_max_color_ramp2(Min,Max, cmin = 'red', cmax = 'green', gray_zero = True):
+
+    print 'Creating min max color table'
+##    Min = int(numpy.amin(array))
+##    if Min <= 0:
+##        Min = 1
+##    Max = int(numpy.amax(array))
     ct = gdal.ColorTable()
     ct.CreateColorRamp(Min, color_dict[cmin], Max, color_dict[cmax])
     if gray_zero:
@@ -2586,14 +2776,25 @@ def new_clip(image, output, clip_to_file, out_no_data = '', band_list = [], Buff
         if names == '' or names == None:
             names = namest
         print 'The datatype is', dt
+        if band_list == []:
+                band_list = range(1,r_info['bands'] + 1)
+        ti = tiled_image(output,  bands = len(band_list),dt =dt, width = w, height = h, projection = r_info['projection'], transform = out_transform, out_no_data = out_no_data,ct = ct, names = names)
         if type(image) == list:
-            b = brick(image,dt,xo,yo,w,h,image_list = True )
-
+            #b = brick(image,dt,xo,yo,w,h,image_list = True )
+            for img in image:
+                r = raster(img,dt,b,xo,yo,w,h)
+                ti.add_tile(r,0,0,b)
+                r = None
         else:
-            b = brick(image, dt, xo,yo, w, h, band_list = band_list)
 
-        stack(b, output,  dt =dt, width = w, height = h, projection = r_info['projection'], transform = out_transform, array_list = True, color_table = ct, category_names = names, out_no_data = out_no_data)
-        b = None
+            for b in band_list:
+                r = raster(image,dt,b,xo,yo,w,h)
+                ti.add_tile(r,0,0,b)
+                r = None
+            #b = brick(image, dt, xo,yo, w, h, band_list = band_list)
+        ti.rm()
+        #stack(b, output,  dt =dt, width = w, height = h, projection = r_info['projection'], transform = out_transform, array_list = True, color_table = ct, category_names = names, out_no_data = out_no_data)
+        #b = None
 ##    else:
 ##        print 'Output:', output, 'already exists'
 ##in_raster = '//166.2.126.38/Working/RTFD_TDD/MZ_13_fix_mask/mz13_fix_t.tif'
@@ -3503,7 +3704,7 @@ def hist(image_list = [], table_name = '', bins ='', dt = '', band_no = 1, guiab
 ######################################################################################
 #Unstacks a stacked raster
 #Can specify which layers should be unstacked (ex: layers = [4,5,6] will only unstack layers 4, 5, and 6)
-def unstack(stack = '', out_dir = '',dt = '', layers = 'All', overwrite = False, guiable = True):
+def unstack(stack = '', out_dir = '',dt = '', layers = 'All', overwrite = False, guiable = True,out_name = ''):
     if stack == '':
         stack = str(askopenfilename(title = 'Select image to unstack',filetypes=[("IMAGINE","*.img"),("tif","*.tif")]))
     if dt == '':
@@ -3516,10 +3717,12 @@ def unstack(stack = '', out_dir = '',dt = '', layers = 'All', overwrite = False,
         layers = range(1,n+1)
     layer_list = []
     for i in layers:
-        if out_dir == '':
-            out_name = os.path.splitext(stack)[0] + '_' + str(i) + '.img'
-        else:
-            out_name = out_dir + os.path.basename(os.path.splitext(stack)[0]) + '_' + str(i) + '.img'
+        if out_name == '' or out_name == None:
+
+            if out_dir == '':
+                out_name = os.path.splitext(stack)[0] + '_' + str(i) + '.img'
+            else:
+                out_name = out_dir + os.path.basename(os.path.splitext(stack)[0]) + '_' + str(i) + '.img'
         if os.path.exists(out_name) == False or overwrite == True:
             array = raster(stack, band_no = i, dt = dt)
 
@@ -3663,7 +3866,7 @@ def reproject_shapefile(shapefile = '', output = '', crs = '', proj = 'utm', zon
 
     elif crs != '':
         crs = '"' + crs + '"'
-    statement = gdal_dir + 'ogr2ogr -f "ESRI Shapefile" -t_srs ' + crs + ' ' + output + ' ' + shapefile
+    statement = gdal_dir + 'ogr2ogr -f "ESRI Shapefile" -t_srs ' + crs + ' "' + output + '" "' + shapefile + '"'
     print statement
     call = subprocess.Popen(statement)
     call.wait()
@@ -3780,7 +3983,20 @@ def reproject(Input, output, crs = '', proj = 'utm', zone = '', datum = 'nad83' 
     print
     if Format != '':
         ot = ' -of ' + Format
-    gdal_call = gdal_dir + 'gdalwarp -wm '+str(wm)+' -multi' + ot +s_crs + dt+ no_data +cutline + crs + res + clip_extent +' -r ' + resampling_method + ' ' + Input + ' "' + output + '"'
+    gdal_call = gdal_dir + 'gdalwarp -wm '+str(wm)+' -multi' + ot +s_crs + dt+ no_data +cutline + crs + res + clip_extent +' -r ' + resampling_method + ' "' + Input + '" "' + output + '"'
+    print gdal_call
+    print
+    call = subprocess.Popen(gdal_call)
+    call.wait()
+
+def gdal_clip(Input, output,clip_file, gdal_dir = gdal_dir):
+    bounds = shape_info(clip_file)['coords']
+    print bounds
+    clip_extent = coords_to_gdal(bounds)
+    print clip_extent
+    Format = format_dict[os.path.splitext(output)[1]]
+##    gdal_call = gdal_dir + 'gdal_translate -projwin ' + str(bounds[0]) + ' ' + str(bounds[1]) + ' ' + str(bounds[2]) + ' ' + str(bounds[3])  + ' -of ' + Format + ' "' +Input + '" "' + output + '"'
+    gdal_call = gdal_dir + 'gdalwarp -cutline ' + clip_file + ' -of ' + Format + ' "' +Input + '" "' + output + '"'
     print gdal_call
     print
     call = subprocess.Popen(gdal_call)
@@ -3839,7 +4055,7 @@ def gdal_sieve(Input, Output = None, threshold = 8, connectedness = 8,out_no_dat
 
         drv = gdal.GetDriverByName(Format)
         dst_ds = drv.Create( Output,src_ds.RasterXSize, src_ds.RasterYSize,1,
-                             srcband.DataType )
+                             srcband.DataType,['COMPRESS=LZW'] )
         wkt = src_ds.GetProjection()
         if wkt != '':
             dst_ds.SetProjection( wkt )
@@ -3880,38 +4096,38 @@ def gdal_sieve(Input, Output = None, threshold = 8, connectedness = 8,out_no_dat
 ########################################################################################################################
 #Function to convert a specified column from a specified dbf file into a list
 #e.g. dbf_to_list(some_dbf_file, integer_column_number)
-def dbf_to_list(dbf_file, field_name):
-    if os.path.splitext(dbf_file)[1] == '.shp':
-        dbf_file = os.path.splitext(dbf_file)[0] + '.dbf'
-    #The next exception that is handled is handled within an if loop
-    #This exception would occur if a non .dbf file was entered
-    #First it finds wither the extension is not a .dbf by splitting the extension out
-    if os.path.splitext(dbf_file)[1] != '.dbf':
-        #Then the user is prompted with what occured and prompted to exit as above
-        print 'Must input a .dbf file'
-        print 'Cannot compile ' + dbf_file
-        raw_input('Press enter to continue')
-        sys.exit()
-
-    #Finally- the actual function code body
-    #First the dbf file is read in using the dbfpy Dbf function
-    db = dbf.Dbf(dbf_file)
-    #Db is now a dbf object within the dbfpy class
-
-    #Next find out how long the dbf is
-    rows = len(db)
-
-    #Set up a list variable to write the column numbers to
-    out_list = []
-
-    #Iterate through each row within the dbf
-    for row in range(rows):
-        #Add each number in the specified column number to the list
-        out_list.append(db[row][field_name])
-    db.close()
-    #Return the list
-    #This makes the entire function equal to the out_list
-    return out_list
+##def dbf_to_list(dbf_file, field_name):
+##    if os.path.splitext(dbf_file)[1] == '.shp':
+##        dbf_file = os.path.splitext(dbf_file)[0] + '.dbf'
+##    #The next exception that is handled is handled within an if loop
+##    #This exception would occur if a non .dbf file was entered
+##    #First it finds wither the extension is not a .dbf by splitting the extension out
+##    if os.path.splitext(dbf_file)[1] != '.dbf':
+##        #Then the user is prompted with what occured and prompted to exit as above
+##        print 'Must input a .dbf file'
+##        print 'Cannot compile ' + dbf_file
+##        raw_input('Press enter to continue')
+##        sys.exit()
+##
+##    #Finally- the actual function code body
+##    #First the dbf file is read in using the dbfpy Dbf function
+##    db = dbf.Dbf(dbf_file)
+##    #Db is now a dbf object within the dbfpy class
+##
+##    #Next find out how long the dbf is
+##    rows = len(db)
+##
+##    #Set up a list variable to write the column numbers to
+##    out_list = []
+##
+##    #Iterate through each row within the dbf
+##    for row in range(rows):
+##        #Add each number in the specified column number to the list
+##        out_list.append(db[row][field_name])
+##    db.close()
+##    #Return the list
+##    #This makes the entire function equal to the out_list
+##    return out_list
 ################################################################
 #Removes every instance of a piece of a string from a
 def remove_all(in_string, remove_piece):
@@ -3929,6 +4145,11 @@ def transpose(in_array):
             temp.append(tab[column][row])
         out_tab.append(temp)
     return out_tab
+def reverse(inList):
+    out = []
+    for i in range(1,len(inList)+1):
+        out.append(inList[-1*i])
+    return out
 def flatten_2d(in_list):
     out_list = []
     for i1 in range(len(in_list)):
@@ -3969,6 +4190,7 @@ def select_by_attribute(shapefile, output, sql_statement, gdal_dir = gdal_dir):
     else:
         print 'Already created', output
 def explode_shapefile(shapefile, out_dir, field):
+    check_dir(out_dir)
     field_list = dbf_to_list(shapefile, field)
     for entry in field_list:
 
@@ -4045,10 +4267,18 @@ def landtrendr_coord_file_maker(input_coords, output_csv):
     ocsvo.writelines(out_list)
     ocsvo.close()
 def write_xy_csv(xy_coords, csv_name):
-    csv_lines = 'x,y\n'
+    print xy_coords
+    if len(xy_coords[0]) > 2:
+        addIndex = True
+        csv_lines = 'id,y,x\n'
+    else:
+        addIndex = False
+        csv_lines = 'x,y\n'
     for line in xy_coords:
-
-        csv_lines += str(line[0]) + ',' + str(line[1]) + '\n'
+        if addIndex:
+            csv_lines += str(line[0]) + ',' + str(line[2]) + ',' + str(line[1]) + '\n'
+        else:
+            csv_lines += str(line[0]) + ',' + str(line[1]) + '\n'
     print 'Writing csv', csv_name
     csv_open = open(csv_name, 'w')
     csv_open.writelines(csv_lines)
@@ -4071,14 +4301,17 @@ def array_coord_to_proj_coord(array_coords, array_coord_list, res):
 #Calculates the x, y coordinates of a point shapefile using the r library "maptools"
 #Returns a 2-d array of the coordinates
 #There is the option of producing a csv file with the coordinates as well
-def xy_coords(shapefile, write_csv = False, csv_name = 'default_csv.csv'):
+def xy_coords(shapefile, write_csv = False, csv_name = 'default_csv.csv', addIndex = False):
     shapeData = ogr.Open(shapefile)
     layer = shapeData.GetLayer()
     points = []
     for index in xrange(layer.GetFeatureCount()):
         feature = layer.GetFeature(index)
         geometry = feature.GetGeometryRef()
-        points.append([geometry.GetX(), geometry.GetY()])
+        if addIndex:
+            points.append([index,geometry.GetX(), geometry.GetY()])
+        else:
+            points.append([geometry.GetX(), geometry.GetY()])
     out_list = points
 
 
@@ -4124,7 +4357,7 @@ def xy_poly_coords(shapefile):
         feat = lyr.GetFeature(FID)
             # Get extent of feat
         geom = feat.GetGeometryRef()
-        area_list.append(geom.GetArea())
+##        area_list.append(geom.GetArea())
         #print FID,geom.GetGeometryName()
         olt = []
         if (geom.GetGeometryName() == 'MULTIPOLYGON'):
@@ -4155,9 +4388,37 @@ def xy_poly_coords(shapefile):
                     #pointsX.append(lon)
                     #pointsY.append(lat)
         out_list.append(olt)
-    print 'Area list', area_list
+##    print 'Area list', area_list
     return out_list, ftl
 
+#######################################################
+#Takes a point shapefile and creates a plot kml and shp with radius specified
+def point_shp_to_plot_kml(shp,kml,radius):
+    proj4 = shape_info(shp)['proj4']
+    xys =  xy_coords(shp, write_csv = False)
+    ids = multiple_field_extraction(shp,['FID'])
+    ids = map(lambda i: i[0],ids)
+    out=[]
+    for i in range(0,len(xys)):
+        id= ids[i]
+        xy = xys[i]
+
+        x = xy[0]
+        y = xy[1]
+
+        t = [[x-radius,y-radius],
+                [x-radius,y+radius],
+                [x+radius,y+radius],
+                [x+radius,y-radius]]
+
+        out.append(t)
+    tShp = os.path.splitext(kml)[0] + '_s.shp'
+
+    if os.path.exists(kml) == False:
+        list_to_polygon_shapefile(out, tShp, proj4)
+        shape_to_kml(tShp, kml,'FID')
+
+##################################
 ##shapefile = r'R:\NAFD3\timesync_setup\test_sampled_new_sample3\p035r032_1999_2009_union_lfd_use_sampled.shp'
 ##ftl,xyss =  xy_poly_coords(shapefile)
 ##i = 0
@@ -4518,7 +4779,7 @@ def merge_shapefile(merge_list, output_name, gdal_dir = gdal_dir):
     if os.path.exists(merge_list[0]) == True:
         if os.path.exists(output_name) == False:
             try:
-                make_merge_shp = gdal_dir + 'ogr2ogr -f "ESRI Shapefile" ' + output_name + ' ' + merge_list[0]
+                make_merge_shp = gdal_dir + 'ogr2ogr -f "ESRI Shapefile" "' + output_name + '" "' + merge_list[0] + '"'
                 print make_merge_shp
                 call = subprocess.Popen(make_merge_shp)
                 call.wait()
@@ -4527,7 +4788,7 @@ def merge_shapefile(merge_list, output_name, gdal_dir = gdal_dir):
     else:
         print merge_list[0], 'does not exist'
     for merge in merge_list[1:]:
-        merge_call = gdal_dir + 'ogr2ogr -f "ESRI Shapefile" -update -append ' + output_name + ' ' + merge + ' -nln ' + os.path.basename(os.path.splitext(output_name)[0])
+        merge_call = gdal_dir + 'ogr2ogr -f "ESRI Shapefile" -update -append "' + output_name + '" "' + merge + '" -nln ' + os.path.basename(os.path.splitext(output_name)[0])
         print 'Merging:', os.path.basename(merge)
         call = subprocess.Popen(merge_call)
         call.wait()
@@ -4714,7 +4975,8 @@ def gdal_merge(merge_list, output_name,gdal_dir = gdal_dir):
 
     call = 'gdal_merge.py -o ' + output_name + ' -q -v -of ' + format_dict[os.path.splitext(output_name)[1]]
     for image in merge_list:
-        call += ' ' + image
+        call += ' "' + image+'" '
+    call = call[:-1]
     bat_lines += call
     bat_lines += '\n' + cwd[:2]
     print bat_lines
@@ -4773,9 +5035,10 @@ def clip_shapefile_to_raster(shapefile, extent_raster, output):
 #Adds a field to a shapefile using ogr
 #User can define the field type with the following options:
 #Datatypes: Integer, Real, String, Float
-def add_field(shapefile, field_name, datatype = 'Integer'):
+def add_field(shapefile, field_name, datatype = 'Integer',fieldWidth = 25):
     if len(field_name) > 10:
         field_name = field_name[:10]
+    field_name = field_name.upper()
     source = ogr.Open(shapefile, 1)
     layer = source.GetLayer()
     layer_defn = layer.GetLayerDefn()
@@ -4784,6 +5047,9 @@ def add_field(shapefile, field_name, datatype = 'Integer'):
     if field_name not in field_names:
         print 'Adding field name: ', field_name
         new_field = ogr.FieldDefn(field_name, eval('ogr.OFT' + datatype))
+        print 'Setting field width'
+        new_field.SetWidth(24)
+        print 'Finished setting width'
         layer.CreateField(new_field)
     else:
         print field_name, 'already exists'
@@ -4792,7 +5058,7 @@ def add_field(shapefile, field_name, datatype = 'Integer'):
 #Updates a field within a shapefile with a provided list of values
 #The list of values must be of the same type as the field (list of strings for a string field type....)
 #The list of values must have the same number of entries as there are features within the shapefile
-def update_field(shapefile, field_name, value_list,datatype = 'Integer'):
+def update_field(shapefile, field_name, value_list,datatype = 'Integer',fieldWidth = 25):
     if len(field_name) > 10:
         field_name = field_name[:10]
     print 'Shortened field name:',field_name
@@ -4808,14 +5074,16 @@ def update_field(shapefile, field_name, value_list,datatype = 'Integer'):
             else:
                 print 'Updating values for field:', field_name
                 for row in range(len(db1)):
+
                     rec = db1[row]
                     rec[field_name] = value_list[row]
                     rec.store()
             db1.close()
+
             updated = True
         except:
             db1.close()
-            add_field(shapefile,field_name,datatype)
+            add_field(shapefile,field_name,datatype,fieldWidth)
 
 ########################################################################################################################
 #Uses the epv function in the rRsac_Tools.r library to extract the point values from a raster
@@ -4890,6 +5158,9 @@ def epv(in_point_shp, in_raster, band = 1):
     rb = src_ds.GetRasterBand(band)
     eoffset = 0
     print 'Extracting', len(xys), 'values from', in_raster
+    current_index = 0
+    list_length = len(xys)
+    last = 0
     for xy in xys:
         #print xy
         #Convert shape coord to raster coordinate
@@ -4904,9 +5175,11 @@ def epv(in_point_shp, in_raster, band = 1):
                 raster_value = rb.ReadRaster(raster_coords[0]-eoffset, raster_coords[1]-eoffset, 1, 1, buf_type = eval('gdal.' + dt))#' + ri['dt']))
                 value = struct.unpack(c_dt, raster_value)[0]
             except:
-                value = 0
+                value = -9999
         #print value
         out_list.append(value)
+        last = status_bar(current_index, list_length, percent_interval = 5,last = last)
+        current_index += 1
     return out_list
     #return [1,2]
 def epv_brick(in_point_shp, in_raster, bands = []):
@@ -5311,8 +5584,8 @@ def getSpatialReferenceFromProj4(proj4):
 ######################################################################################
 #Converts a list of x,y coordinates to a shapefile
 #Snaps the location to the centroid of a snap raster's pixel locations
-def list_to_point_shapefile(xy_coord_list, snap_raster = '', output = '', prj = '',dt = 'Byte'):
-    print 'Creating', output.split('/')[-1]
+def list_to_point_shapefile(xy_coord_list, snap_raster = '', output = '', prj = '',dt = 'Byte',addXY = True):
+##    print 'Creating', output.split('/')[-1]
     if snap_raster != '':
         info = raster_info(snap_raster)
         projection = info['projection']
@@ -5337,8 +5610,8 @@ def list_to_point_shapefile(xy_coord_list, snap_raster = '', output = '', prj = 
     shapeData = driver.CreateDataSource(shapePath)
     spatialReference = getSpatialReferenceFromProj4(proj4)
     layerName = os.path.splitext(os.path.basename(shapePath))[0]
-    print layerName
-    print shapeData
+
+
     layer = shapeData.CreateLayer(layerName, spatialReference, ogr.wkbPoint)
     layerDefinition = layer.GetLayerDefn()
 
@@ -5355,17 +5628,17 @@ def list_to_point_shapefile(xy_coord_list, snap_raster = '', output = '', prj = 
         geometry.Destroy()
         feature.Destroy()
         pointIndex += 1
-        xs.append(float(xy[0]))
-        ys.append(float(xy[1]))
+        xs.append(xy[0])
+        ys.append(xy[1])
     shapeData.Destroy()
-
 
 
 
     #add_field(output, 'x', datatype = 'Real')
     #add_field(output, 'y', datatype = 'Real')
-    update_field(output, 'x', xs, datatype = 'Real')
-    update_field(output, 'y', ys, datatype = 'Real')
+    if addXY:
+        update_field(output, 'XS', xs, datatype = 'Integer',fieldWidth =25)
+        update_field(output, 'YS', ys, datatype = 'Integer',fieldWidth =25)
 ######################################################################################
 def list_to_polygon_shapefile(xy_coord_list, output, proj4):
     driver = ogr.GetDriverByName('ESRI Shapefile')
@@ -5381,7 +5654,7 @@ def list_to_polygon_shapefile(xy_coord_list, output, proj4):
         xy_coord_lists = xy_coord_list
 
     for xy_coord_list in xy_coord_lists:
-        print xy_coord_list
+##        print xy_coord_list
         ring = ogr.Geometry(ogr.wkbLinearRing)
         for vertex in xy_coord_list:
             ring.AddPoint(vertex[0], vertex[1])
@@ -5395,6 +5668,85 @@ def list_to_polygon_shapefile(xy_coord_list, output, proj4):
         layer.CreateFeature(feature)
     feature.Destroy()
     shapeData.Destroy()
+#Taken from: http://geospatialpython.com/2011/01/point-in-polygon.html
+def point_in_poly(x,y,poly):
+
+    n = len(poly)
+    inside = False
+
+    p1x,p1y = poly[0]
+    for i in range(n+1):
+        p2x,p2y = poly[i % n]
+        if y > min(p1y,p2y):
+            if y <= max(p1y,p2y):
+                if x <= max(p1x,p2x):
+                    if p1y != p2y:
+                        xints = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
+                    if p1x == p2x or x <= xints:
+                        inside = not inside
+        p1x,p1y = p2x,p2y
+
+    return inside
+######################################################################################
+#Wrapper to find points that intersect set of polygons
+def intersectPoints(points,polygons,output):
+    out_xys = []
+    xys = xy_coords(points, False)
+
+    coordss,Type = xy_poly_coords(polygons)
+    current_index = 0
+    list_length = len(xys)
+    last = 0
+
+    for x,y in xys:
+        intersects = False
+        ci = 0
+        while intersects == False and ci < len(coordss):
+
+            intersects =point_in_poly(x,y,coordss[ci])
+            ci += 1
+        if intersects:
+            out_xys.append([x,y])
+        last = status_bar(current_index, list_length, percent_interval = 1, last = last)
+        current_index += 1
+    list_to_point_shapefile(out_xys, snap_raster = '', output =  output, prj = crs,dt = 'Long',addXY = False)
+
+
+######################################################################################
+def degreeTileMaker(output,size = 10,proj4 = '+proj=longlat +datum=NAD83 +no_defs'):
+
+
+    xs = range(-180,171,size)
+    ys = range(-90,81,size)[::-1]
+
+    xys = []
+    tiles = []
+    for x in xs:
+        for y in ys:
+            xys.append([x,y])
+    lonField = []
+    latField = []
+    lonLatField = []
+    for xy in xys:
+        t = [[xy[0],xy[1]],
+            [xy[0]+size,xy[1]],
+            [xy[0]+size,xy[1]-size],
+            [xy[0],xy[1]-size]
+            ]
+        lonField.append(xy[0])
+        latField.append(xy[1])
+        lonLatField.append(str(xy[0]) + '_' + str(xy[1]))
+        tiles.append(t)
+
+    print output
+    if os.path.exists(output) == False:
+        list_to_polygon_shapefile(tiles, output, proj4)
+
+        update_field(output, 'lon', lonField,datatype = 'Integer')
+        update_field(output, 'lat', latField,datatype = 'Integer')
+        update_field(output, 'lonLat',lonLatField, datatype = 'String')
+    else:
+        print 'Already created',output
 ######################################################################################
 def mbr_coords(coords):
     out_coords = []
@@ -5417,6 +5769,30 @@ def polygon_to_mbr_polygon(Input, Output):
     else:
         print 'Already created:', Output
 
+######################################################################################
+def big_ndi(in_stack, output, band1, band2, ratio= False):
+    ti = tiled_image(output,in_stack,dt = 'Float32',bands = 1, outline_tiles = True)
+
+    ci = 1
+    for xo,yo,w,h in ti.chunk_list:
+
+        print 'Processing chunk:', ci,'/' + str(len(ti.chunk_list))
+        r1 = raster(in_stack,'Float32',band1,xo,yo,w,h)
+        r2 = raster(in_stack,'Float32',band2,xo,yo,w,h)
+
+        if ratio:
+            out = r1/r2
+        else:
+            out = (r1 - r2) / (r1 + r2)
+        print out.dtype
+        ti.add_tile(out,xo,yo)
+
+        out = None
+        r1 = None
+        r2 = None
+        ci += 1
+
+    ti.rm()
 ######################################################################################
 #Computes a normalized difference index for a stack
 #Some common Landsat TM ndi's are:
@@ -5550,7 +5926,7 @@ def big_stratified_sampler(image, sample_nos, sample_name, dt = '', wo_replaceme
     r_info = raster_info(image)
     res = r_info['res']
     coords = r_info['coords']
-
+    print dt
     #Read in the raster as a numpy array
     r = raster(image, dt = dt)
 
@@ -5572,6 +5948,7 @@ def big_stratified_sampler(image, sample_nos, sample_name, dt = '', wo_replaceme
 
         #Convert the raster cells from the class that is being sampled into two numpy arrays with the coordinates
         coord_set = numpy.where(r == class_code)
+
         #Find the length of the list of raster coordinates for the given class
         l = len(coord_set[0]) -1
 
